@@ -89,6 +89,11 @@ def _run_sync(coro, timeout: float = _DEFAULT_TIMEOUT):
 
 
 # ---------------------------------------------------------------------------
+# Backward-compatible alias — instances use self._run_sync() instead.
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
 # Tool schemas
 # ---------------------------------------------------------------------------
 
@@ -478,6 +483,10 @@ class HindsightMemoryProvider(MemoryProvider):
                 self._client = Hindsight(**kwargs)
         return self._client
 
+    def _run_sync(self, coro):
+        """Schedule *coro* on the shared loop using the configured timeout."""
+        return _run_sync(coro, timeout=self._timeout)
+
     def initialize(self, session_id: str, **kwargs) -> None:
         self._session_id = session_id
 
@@ -699,7 +708,7 @@ class HindsightMemoryProvider(MemoryProvider):
                 client = self._get_client()
                 if self._prefetch_method == "reflect":
                     logger.debug("Prefetch: calling reflect (bank=%s, query_len=%d)", self._bank_id, len(query))
-                    resp = _run_sync(client.areflect(bank_id=self._bank_id, query=query, budget=self._budget))
+                    resp = self._run_sync(client.areflect(bank_id=self._bank_id, query=query, budget=self._budget))
                     text = resp.text or ""
                 else:
                     recall_kwargs: dict = {
@@ -713,7 +722,7 @@ class HindsightMemoryProvider(MemoryProvider):
                         recall_kwargs["types"] = self._recall_types
                     logger.debug("Prefetch: calling recall (bank=%s, query_len=%d, budget=%s)",
                                  self._bank_id, len(query), self._budget)
-                    resp = _run_sync(client.arecall(**recall_kwargs))
+                    resp = self._run_sync(client.arecall(**recall_kwargs))
                     num_results = len(resp.results) if resp.results else 0
                     logger.debug("Prefetch: recall returned %d results", num_results)
                     text = "\n".join(f"- {r.text}" for r in resp.results if r.text) if resp.results else ""
@@ -770,7 +779,7 @@ class HindsightMemoryProvider(MemoryProvider):
                     item["tags"] = self._tags
                 logger.debug("Hindsight retain: bank=%s, doc=%s, async=%s, content_len=%d, num_turns=%d",
                              self._bank_id, self._session_id, self._retain_async, len(content), len(self._session_turns))
-                _run_sync(client.aretain_batch(
+                self._run_sync(client.aretain_batch(
                     bank_id=self._bank_id,
                     items=[item],
                     document_id=self._session_id,
@@ -810,7 +819,7 @@ class HindsightMemoryProvider(MemoryProvider):
                     retain_kwargs["tags"] = self._tags
                 logger.debug("Tool hindsight_retain: bank=%s, content_len=%d, context=%s",
                              self._bank_id, len(content), context)
-                _run_sync(client.aretain(**retain_kwargs))
+                self._run_sync(client.aretain(**retain_kwargs))
                 logger.debug("Tool hindsight_retain: success")
                 return json.dumps({"result": "Memory stored successfully."})
             except Exception as e:
@@ -833,7 +842,7 @@ class HindsightMemoryProvider(MemoryProvider):
                     recall_kwargs["types"] = self._recall_types
                 logger.debug("Tool hindsight_recall: bank=%s, query_len=%d, budget=%s",
                              self._bank_id, len(query), self._budget)
-                resp = _run_sync(client.arecall(**recall_kwargs))
+                resp = self._run_sync(client.arecall(**recall_kwargs))
                 num_results = len(resp.results) if resp.results else 0
                 logger.debug("Tool hindsight_recall: %d results", num_results)
                 if not resp.results:
@@ -851,7 +860,7 @@ class HindsightMemoryProvider(MemoryProvider):
             try:
                 logger.debug("Tool hindsight_reflect: bank=%s, query_len=%d, budget=%s",
                              self._bank_id, len(query), self._budget)
-                resp = _run_sync(client.areflect(
+                resp = self._run_sync(client.areflect(
                     bank_id=self._bank_id, query=query, budget=self._budget
                 ))
                 logger.debug("Tool hindsight_reflect: response_len=%d", len(resp.text or ""))
@@ -879,7 +888,7 @@ class HindsightMemoryProvider(MemoryProvider):
                     except RuntimeError:
                         pass
                 else:
-                    _run_sync(self._client.aclose())
+                    self._run_sync(self._client.aclose())
             except Exception:
                 pass
             self._client = None
